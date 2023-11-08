@@ -107,7 +107,9 @@ makes = c(vis$make_clean, mot_sub$DVSA_make_clean)
 makes = as.data.frame(table(makes))
 makes = makes[order(makes$Freq, decreasing = TRUE),]
 
-write.csv(makes,"data/unique_makes_cleaned_DVSA_DVLA.csv", row.names = FALSE, na = "") #53,720 unique makes 33010
+makes = left_join(makes, approved_makes[,c("makes","approved")], by = "makes")
+makes = makes[order(makes$approved),]
+write.csv(makes,"data/unique_makes_cleaned_DVSA_DVLA.csv", row.names = FALSE, na = "") #53,720 unique makes 30918
 
 stop()
 

@@ -4,13 +4,14 @@ path = "D:/OneDrive - University of Leeds/Data/DVLA/VIS/"
 fls = list.files(path, recursive = TRUE)
 
 vis = list()
-for(i in 1:length(fls)){
+for(i in 7409:length(fls)){
   if(i %% 100 == 0| i == 1){
     message(Sys.time()," ",i)
   }
   vis[[i]] <- readRDS(file.path(path, fls[i]))
 }
 vis <- data.table::rbindlist(vis, fill = TRUE)
+#52146673 first pass
 
 # summary(duplicated(vis$registrationNumber))
 # dup <- vis$registrationNumber[duplicated(vis$registrationNumber)]
@@ -52,7 +53,7 @@ vrms_2018 = vrms_2018[!vrms_2018$registration %in% vis$registrationNumber, ]
 vrms_missing = rbind(vrms_2023, vrms_2018)
 vrms_missing = vrms_missing[!duplicated(vrms_missing$registration),]
 
-saveRDS(vrms_missing, "data/VRMs_missing_from_DVLA_first_pass.Rds")
+saveRDS(vrms_missing, "data/VRMs_missing_from_DVLA_second_pass.Rds")
 
-summary(duplicated(main$registration))
+#summary(duplicated(main$registration))
 

@@ -44,7 +44,8 @@ approved_makes = approved_makes[approved_makes$approved == "y",]
 # Check approved_makes
 for(i in 1:nrow(approved_makes)){
   if(any(stringi::stri_detect_regex(approved_makes$makes[i], paste0("^",approved_makes$makes[-i],"\\b")))){
-    stop(approved_makes$makes[i]," matches another approved make")
+    stop(approved_makes$makes[i]," matches another approved make ")
+    approved_makes$makes[stringi::stri_detect_regex(approved_makes$makes[i], paste0("^",approved_makes$makes,"\\b"))]
   }
 }
 
@@ -109,13 +110,36 @@ makes = makes[order(makes$Freq, decreasing = TRUE),]
 
 makes = left_join(makes, approved_makes[,c("makes","approved")], by = "makes")
 makes = makes[order(makes$approved),]
-write.csv(makes,"data/unique_makes_cleaned_DVSA_DVLA.csv", row.names = FALSE, na = "") #53,720 unique makes 30918
 
-stop()
+rejected_makes$Freq <- NA
+makes$should_be = NA
 
-join = mot_sub[vis, on  = .(DVSA_registration = registrationNumber)]
+makes = rbind(rejected_makes, makes)
 
-check = join[,c("DVSA_registration","DVSA_make","make","DVSA_fuelType","fuelType","DVSA_registrationDate","monthOfFirstRegistration","DVSA_primaryColour","colour","DVSA_engineSize","engineCapacity")]
+write.csv(makes,"data/unique_makes_cleaned_DVSA_DVLA.csv", row.names = FALSE, na = "") #23,802 unique makes
+
+summary(mot_sub$DVSA_make_clean %in% approved_makes$makes)
+summary(vis$make_clean %in% approved_makes$makes)
+
+stop("Do you want to run the slow joining process?")
+
+summary(duplicated(vis$registrationNumber))
+summary(duplicated(mot_sub$DVSA_registration))
+
+mot_dups = mot_sub$DVSA_registration[duplicated(mot_sub$DVSA_registration)]
+mot_dups = mot_sub[mot_sub$DVSA_registration %in% mot_dups, ]
+# Looks like duplicates are due to cherished plates
+#VIS only has most recent plate wile MOT history can have older plates.
+
+
+#join = mot_sub[vis, on  = .(DVSA_registration = registrationNumber)]
+join = vis[mot_sub, on  = .(registrationNumber = DVSA_registration)]
+
+
+
+check = join[,c("DVSA_registration","DVSA_make","DVSA_make_clean","make","make_clean","DVSA_fuelType","fuelType",
+                "DVSA_registrationDate","monthOfFirstRegistration","DVSA_primaryColour",
+                "colour","DVSA_engineSize","engineCapacity")]
 check$DVSA_primaryColour = toupper(check$DVSA_primaryColour)
 check$DVSA_fuelType = toupper(check$DVSA_fuelType)
 
@@ -124,37 +148,41 @@ check$match_fuelType = check$DVSA_fuelType == check$fuelType
 check$match_engineSize = check$DVSA_engineSize == check$engineCapacity
 check$match_date = paste0(lubridate::year(check$DVSA_registrationDate),"-",lubridate::month(check$DVSA_registrationDate)) == paste0(lubridate::year(check$monthOfFirstRegistration),"-",lubridate::month(check$monthOfFirstRegistration))
 check$match_make = check$DVSA_make == check$make
+check$match_make_clean = check$DVSA_make_clean == check$make_clean
 
 check$match_colour[is.na(check$match_colour)] = FALSE
 check$match_fuelType[is.na(check$match_fuelType)] = FALSE
 check$match_engineSize[is.na(check$match_engineSize)] = FALSE
 check$match_date[is.na(check$match_date)] = FALSE
 check$match_make[is.na(check$match_make)] = FALSE
+check$match_make_clean[is.na(check$match_make_clean)] = FALSE
 
-check$match_count = rowSums(check[,c("match_colour","match_fuelType","match_engineSize","match_date","match_make")])
+check$match_count = rowSums(check[,c("match_colour","match_fuelType","match_engineSize","match_date","match_make","match_make_clean")])
 
-check_no_match = check[check$match_count != 5,]
+check_no_match = check[check$match_count < 5,]
 
 no_match_summary = check_no_match %>%
-  group_by(DVSA_make, make, DVSA_fuelType, fuelType, DVSA_registrationDate, monthOfFirstRegistration, 
+  group_by(DVSA_make_clean, make_clean, DVSA_fuelType, fuelType, DVSA_registrationDate, monthOfFirstRegistration, 
            DVSA_primaryColour, colour, DVSA_engineSize, engineCapacity,match_colour, match_fuelType, 
-           match_engineSize, match_date, match_make, match_count) %>%
+           match_engineSize, match_date, match_make_clean, match_count) %>%
   summarise(n_vehicles = n())
 
 no_match_summary$make_dvla_in_dvsa = NULL
 
-no_match_summary$make_dvsa_in_dvla = unlist(purrr::map2(no_match_summary$DVSA_make, no_match_summary$make, grepl, fixed = TRUE))
-no_match_summary$make_dvla_in_dvsa = unlist(purrr::map2(no_match_summary$make, no_match_summary$DVSA_make, grepl, fixed = TRUE))
+no_match_summary$make_dvsa_in_dvla = unlist(purrr::map2(no_match_summary$DVSA_make_clean, no_match_summary$make_clean, grepl, fixed = TRUE))
+no_match_summary$make_dvla_in_dvsa = unlist(purrr::map2(no_match_summary$make_clean, no_match_summary$DVSA_make_clean, grepl, fixed = TRUE))
 no_match_summary$make_partial_match = no_match_summary$make_dvsa_in_dvla | no_match_summary$make_dvla_in_dvsa
 
-make_bad = no_match_summary[!no_match_summary$match_make,]
-make_good = no_match_summary[no_match_summary$match_make,]
+make_bad = no_match_summary[!no_match_summary$match_make_clean,]
+make_good = no_match_summary[no_match_summary$match_make_clean,]
 
 make_bad_summary = make_bad %>%
-  group_by(DVSA_make, make,  make_dvsa_in_dvla, make_dvla_in_dvsa, make_partial_match, 
+  group_by(DVSA_make_clean, make_clean,  make_dvsa_in_dvla, make_dvla_in_dvsa, make_partial_match, 
            match_count, match_colour, match_fuelType, match_engineSize, match_date) %>%
   summarise(n_vehicles = sum(n_vehicles))
 make_bad_summary = make_bad_summary[order(make_bad_summary$n_vehicles, decreasing = TRUE),]
+
+
 
 
 # Read in Ivo's matches
